@@ -157,7 +157,12 @@ while (i <=nrow(annot_sample_ARTX)) {
 id.snp_paired<-match(annot_samplePaired$CEL.file,colnames(SNP_calls))
 SNP_calls_paired<-SNP_calls[,id.snp_paired] #836,872   1,022 final set 
 
-save(SNP_calls_paired,annot_sample_final_paired,annot,file="/Users/Pinedasans/Catalyst/Data/Genotyping/Genotyping_QC.Rdata")
+###To obtain the variable with the difference
+non.list<-seq(1,1022,2)
+SNP_calls_diff<-apply(SNP_calls_paired,1,function(x) abs(diff(x))[non.list])
+SNP_calls_diff2<-apply(SNP_calls_diff,2,function(x) replace(x,x==2,1))
+
+save(SNP_calls_paired,SNP_calls_diff2,annot_samplePaired,annot,file="/Users/Pinedasans/Catalyst/Data/Genotyping/Genotyping_QC.Rdata")
 
 
 
