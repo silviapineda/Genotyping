@@ -18,7 +18,7 @@ print(x)
 
 
 #Work Directory
-setwd("/Users/Pinedasans/Catalyst/Results/Genotyping/")
+setwd("/Users/Pinedasans/Catalyst/Results/Validation/")
 
 ###Reading the Total genotypes data frame
 load("/Users/Pinedasans/Catalyst/Data/Genotyping/Genotyping_QC.Rdata")
@@ -31,11 +31,13 @@ load("/Users/Pinedasans/Catalyst/Data/Genotyping/Genotyping_QC.Rdata")
 ##   1. Analysis considering only my data ####
 ##############################################
 SNP_calls_diff_complete<-t(SNP_calls_paired[! apply( SNP_calls_paired, 1 , function(x) any(is.na(x)) ), ]) #275,869
-write.table()
+annot[match(colnames(SNP_calls_diff_complete),annot$SNP_id),"SNP_rs"]
+write.table(annot[match(colnames(SNP_calls_diff_complete),annot$SNP_id),3:4],"/Users/Pinedasans/Catalyst/Data/Genotyping/VariantListVal.txt",
+            row.names = F,col.names = F,sep="\t")
 
 pca <- prcomp(SNP_calls_diff_complete) 
 plot(pca, type = "l")
-biplot(pca,cex=c(0.6,0.6))
+#biplot(pca,cex=c(0.6,0.6))
 
 SPP <- annot_samplePaired$Outcome
 #SPP <-addNA(SPP)
@@ -44,7 +46,7 @@ COLOR <- c(2:3)
 
 pc <- c(1,2)
 plot(pca$x[,pc[1]], pca$x[,pc[2]], col=COLOR[SPP],pch=20,xlab="PCA1",ylab="PCA2")
-legend(-90,35, legend=levels(SPP), col=COLOR,pch=20,cex=0.8)
+legend(-200,-140, legend=levels(SPP), col=COLOR,pch=20,cex=0.8)
 
 
 
@@ -52,14 +54,9 @@ legend(-90,35, legend=levels(SPP), col=COLOR,pch=20,cex=0.8)
 ##    2. Analysis considering the 1000G population ######
 #########################################################
 
-#########################
-####Read the 1000G vcf 
-#########################
-#Work Directory
-setwd("/Users/Pinedasans/Data/Catalyst/ExomeSeq/1000G/")
-
+### Prepare the data with Mikel's Scripts.
 library("VariantAnnotation") #load the package
-variants.1000G.vcf <- readVcf("1000G.variants.selected.vcf","hg19")
+variants.1000G.vcf <- readVcf("/Users/Pinedasans/Catalyst/Data/Genotyping/1000G.variants.selected.vcf","hg19")
 
 
 library(SNPRelate)
@@ -82,33 +79,40 @@ save(df.1000G,file="ExomeSeq1000GVCF.Rdata")
 write.table(df.1000G,file="df.1000G.txt")
 ##I have executed the program Mikel has sent to me (silvia-project-assembly-1.0.jar) to chande the 0 for 2 and 2 for 0.
 ##The name is df.1000G.mod.txt
-df_1000G_mod<-read.table("/Users/Pinedasans/Data/Catalyst/ExomeSeq/1000G/df_1000G_mod.txt") #433,402
-load("/Users/Pinedasans/Data/Catalyst/ExomeSeq/ExomeSeqVCF_SNPs.Rdata")
-colnames(df_1000G_mod)[2:3]<-c("Start","Chr")
-merge_data <- merge(df_joint_qc,df_1000G_mod, by=c("Chr","Start")) #420,569
-exome_variants_1000G<-data.matrix(merge_data[,-c(1:15,72:74)])
-rownames(exome_variants_1000G)<-merge_data$snp_id.x
-exome_variants_1000G_complete<-na.omit(exome_variants_1000G) #402,169
+df_1000G_mod<-read.table("/Users/Pinedasans/Catalyst/Data/Genotyping/df.1000G_val_mod.txt") #275,131
+load("/Users/Pinedasans/Catalyst/Data/Genotyping/Genotyping_QC.Rdata")
+colnames(df_1000G_mod)[2:3]<-c("Pos","Chr")
+id.snp<-match(annot$SNP_id,rownames(SNP_calls_paired))
+SNP_calls_paired_to_merge<-cbind(SNP_calls_paired[na.omit(id.snp),],annot[which(is.na(id.snp)==F),3:4])
+merge_data <- merge(SNP_calls_paired_to_merge,df_1000G_mod, by=c("Chr","Pos")) #275,133
+SNP_1000G<-data.matrix(merge_data[,-c(1:2,1025:1027)])
+SNP<-SNP_1000G[,1:1023]
+SNP.2<-sapply(1:dim(SNP)[2],function(x) replace(SNP[,x],SNP[,x]=="1","0"))
+SNP.3<-sapply(1:dim(SNP.2)[2],function(x) replace(SNP.2[,x],SNP.2[,x]=="2","1"))
+SNP<-sapply(1:dim(SNP.3)[2],function(x) replace(SNP.3[,x],SNP.3[,x]=="3","2"))
+SNP_1000G<-cbind(SNP_1000G[,1024],SNP)
 
-save(exome_variants_1000G_complete,file="/Users/Pinedasans/Data/Catalyst/ExomeSeq/1000G/ExomeSeq1000G_PCA.Rdata")
+rownames(SNP_1000G)<-merge_data$snp_id
+SNP_1000G_complete<-na.omit(SNP_1000G) #275,133
 
+save(SNP_1000G_complete,file="/Users/Pinedasans/Catalyst/Data/Genotyping/SNP_1000G_PCA.Rdata")
+###Run PCA in the server
 
-load("/Users/Pinedasans/Data/Catalyst/ExomeSeq/pca.Rdata")
+load("/Users/Pinedasans/Catalyst/Results/Validation/pca_val.Rdata")
 
-sample1000g<-read.table("igsr_samples.txt",header=T,sep="\t")
+sample1000g<-read.table("/Users/Pinedasans/Catalyst/Data/ExomeSeq/igsr_samples.txt",header=T,sep="\t")
 id.1000G<-match(rownames(pca$x),sample1000g$Sample_name)
-demographics<-read.table("/Users/Pinedasans/Data/Catalyst/Demographics.txt",sep="\t",header=T) ##Reading the variant list with the phenotype
 
 ###Plotting the result with the super population
 SPP <- sample1000g$Superpopulation_code[id.1000G]
 SPP <-addNA(SPP)
-levels.SPP <- factor(c("AFR","AMR","EAS","EUR","SAS","Transplant"))
+levels.SPP <- factor(c("AFR","AMR","EAS","EUR","SAS","GWAS"))
 COLOR <- c(2:6,1)
 
 
 pc <- c(1,2)
-plot(pca$x[,pc[1]][1:2563], pca$x[,pc[2]][1:2563], col=COLOR[SPP],pch=20,xlab="PCA2",ylab="PCA1")
-legend(110,100, legend=levels(levels.SPP), col=COLOR,pch=20,cex=0.8)
+plot(pca$x[,pc[1]][1023:3526], pca$x[,pc[2]][1023:3526], col=COLOR[SPP],pch=20,xlab="PCA2",ylab="PCA1")
+legend(250,150, legend=levels(levels.SPP), col=COLOR,pch=20,cex=0.8)
 #text(pca$x[2505:2559,pc[1]], pca$x[2505:2559,pc[2]],labels=rownames(pca$x)[2505:2559],cex=0.8,col=1)
 library("zoom")
 zm()
