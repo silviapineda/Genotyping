@@ -86,16 +86,17 @@ id.snp<-match(annot$SNP_id,rownames(SNP_calls_paired))
 SNP_calls_paired_to_merge<-cbind(SNP_calls_paired[na.omit(id.snp),],annot[which(is.na(id.snp)==F),3:4])
 merge_data <- merge(SNP_calls_paired_to_merge,df_1000G_mod, by=c("Chr","Pos")) #275,133
 SNP_1000G<-data.matrix(merge_data[,-c(1:2,1025:1027)])
-SNP<-SNP_1000G[,1:1023]
+SNP<-SNP_1000G[,1:1022]
 SNP.2<-sapply(1:dim(SNP)[2],function(x) replace(SNP[,x],SNP[,x]=="1","0"))
 SNP.3<-sapply(1:dim(SNP.2)[2],function(x) replace(SNP.2[,x],SNP.2[,x]=="2","1"))
 SNP<-sapply(1:dim(SNP.3)[2],function(x) replace(SNP.3[,x],SNP.3[,x]=="3","2"))
-SNP_1000G<-cbind(SNP_1000G[,1024],SNP)
+SNP_1000G<-cbind(SNP_1000G[,1023:ncol(SNP_1000G)],SNP)
 
 rownames(SNP_1000G)<-merge_data$snp_id
 SNP_1000G_complete<-na.omit(SNP_1000G) #275,133
+SNP_1000G_complete_num<-apply(SNP_1000G_complete,1,as.numeric)
 
-save(SNP_1000G_complete,file="/Users/Pinedasans/Catalyst/Data/Genotyping/SNP_1000G_PCA.Rdata")
+save(SNP_1000G_complete_num,file="/Users/Pinedasans/Catalyst/Data/Genotyping/SNP_1000G_PCA.Rdata")
 ###Run PCA in the server
 
 load("/Users/Pinedasans/Catalyst/Results/Validation/pca_val.Rdata")
@@ -111,7 +112,7 @@ COLOR <- c(2:6,1)
 
 
 pc <- c(1,2)
-plot(pca$x[,pc[1]][1023:3526], pca$x[,pc[2]][1023:3526], col=COLOR[SPP],pch=20,xlab="PCA2",ylab="PCA1")
+plot(pca$x[,pc[1]][1:2563], pca$x[,pc[2]][1:2563], col=COLOR[SPP],pch=20,xlab="PCA2",ylab="PCA1")
 legend(250,150, legend=levels(levels.SPP), col=COLOR,pch=20,cex=0.8)
 #text(pca$x[2505:2559,pc[1]], pca$x[2505:2559,pc[2]],labels=rownames(pca$x)[2505:2559],cex=0.8,col=1)
 library("zoom")
