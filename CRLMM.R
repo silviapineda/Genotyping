@@ -165,6 +165,31 @@ SNP_calls_diff2<-apply(SNP_calls_diff,2,function(x) replace(x,x==2,1))
 save(SNP_calls_paired,SNP_calls_diff2,annot_samplePaired,annot,file="/Users/Pinedasans/Catalyst/Data/Genotyping/Genotyping_QC.Rdata")
 
 
+##CAN samples are together with the AR samples 
+annot_sample_ARCAN_TX<-read.table("/Users/Pinedasans/Catalyst/Data/Genotyping/annot_samples_to_ARTXwithCANasAR.txt",header=T,sep="\t")
+i=1
+annot_samplePaired<-NULL
+while (i <=nrow(annot_sample_ARCAN_TX)) {
+print(i)
+if(annot_sample_ARCAN_TX$PairID[i]==annot_sample_ARCAN_TX$PairID[i+1]){
+  annot_samplePaired<-rbind(annot_samplePaired,annot_sample_ARCAN_TX[i:(i+1),])
+  i=i+2
+} else {
+  i=i+1
+}
+}
+###1,316 samples paired
+
+id.snp_paired<-match(annot_samplePaired$CEL.file,colnames(SNP_calls))
+SNP_calls_paired<-SNP_calls[,id.snp_paired] #836,872   1,316 final set 
+
+###To obtain the variable with the difference
+non.list<-seq(1,1316,2)
+SNP_calls_diff<-apply(SNP_calls_paired,1,function(x) abs(diff(x))[non.list])
+SNP_calls_diff2<-apply(SNP_calls_diff,2,function(x) replace(x,x==2,1))
+
+save(SNP_calls_paired,SNP_calls_diff2,annot_samplePaired,annot,file="/Users/Pinedasans/Catalyst/Data/Genotyping/Genotyping_ARCAN_QC.Rdata")
+
 
 
 
