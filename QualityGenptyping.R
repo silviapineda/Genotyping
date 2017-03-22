@@ -27,16 +27,21 @@ library("MASS")
 library("VanillaICE")
 
 library(devtools)
-install_github("rscharpf/crlmmCompendium")
+#install_github("rscharpf/crlmmCompendium")
 library(crlmmCompendium)
 
 setwd("/Users/Pinedasans/Catalyst/Data/Genotyping/")
 load("clrm.Rdata")
 load("cnSet.Rdata")
 
-invisible(open(cnSet))
-genotypeSet <- cnSet[match("SNP_A-1994693", featureNames(cnSet)), ]
-invisible(close(cnSet))
+load("Genotyping_QC.Rdata")
+samples_split<-strsplit(sampleNames(cnSet), "[.]")
+samples_names<-unlist(lapply(samples_split, `[[`, 1))
+SampleSet <- cnSet[,match(colnames(SNP_calls_paired), samples_names)]
+
+invisible(open(SampleSet))
+genotypeSet <- SampleSet[match("SNP_A-8348664", featureNames(SampleSet)), ]
+invisible(close(SampleSet))
 
 #extracts the normalized intensities, the genotype calls, and the confidence scores for the genotypes 
 #and stores the results in an object of class ‘data.frame’
@@ -48,7 +53,8 @@ fill1 <- brewer.pal(3, "Set1")[df$gt]
 gt.conf <- df$gt.conf
 min.conf <- min(gt.conf)
 max.conf <- max(gt.conf)
-sc <- (gt.conf - min.conf)/(max.conf - min.conf)
+sc<-gt.conf>0.9
+#sc <- (gt.conf - min.conf)/(max.conf - min.conf)
 fill2 <- sapply(sc, grey)
 
 #subset of samples to highlight the batch effects frequently observed in large studies
