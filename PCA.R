@@ -30,12 +30,12 @@ load("/Users/Pinedasans/Catalyst/Data/Genotyping/Genotyping_QC.Rdata")
 ##############################################
 ##   1. Analysis considering only my data ####
 ##############################################
-SNP_calls_diff_complete<-t(SNP_calls_paired[! apply( SNP_calls_paired, 1 , function(x) any(is.na(x)) ), ]) #275,869
-annot[match(colnames(SNP_calls_diff_complete),annot$SNP_id),"SNP_rs"]
-write.table(annot[match(colnames(SNP_calls_diff_complete),annot$SNP_id),3:4],"/Users/Pinedasans/Catalyst/Data/Genotyping/VariantListVal.txt",
+SNP_calls_complete<-t(SNP_calls_paired[! apply( SNP_calls_paired, 1 , function(x) any(is.na(x)) ), ]) #275,869
+annot[match(colnames(SNP_calls_complete),annot$SNP_id),"SNP_rs"]
+write.table(annot[match(colnames(SNP_calls_complete),annot$SNP_id),3:4],"/Users/Pinedasans/Catalyst/Data/Genotyping/VariantListVal.txt",
             row.names = F,col.names = F,sep="\t")
 
-pca <- prcomp(SNP_calls_diff_complete) 
+pca <- prcomp(SNP_calls_complete) 
 plot(pca, type = "l")
 #biplot(pca,cex=c(0.6,0.6))
 
@@ -90,13 +90,13 @@ SNP<-SNP_1000G[,1:1022]
 SNP.2<-sapply(1:dim(SNP)[2],function(x) replace(SNP[,x],SNP[,x]=="1","0"))
 SNP.3<-sapply(1:dim(SNP.2)[2],function(x) replace(SNP.2[,x],SNP.2[,x]=="2","1"))
 SNP<-sapply(1:dim(SNP.3)[2],function(x) replace(SNP.3[,x],SNP.3[,x]=="3","2"))
-SNP_1000G<-cbind(SNP_1000G[,1023:ncol(SNP_1000G)],SNP)
+SNP_1000G_2<-cbind(SNP,SNP_1000G[,1023:ncol(SNP_1000G)])
 
-rownames(SNP_1000G)<-merge_data$snp_id
-SNP_1000G_complete<-na.omit(SNP_1000G) #275,133
-SNP_1000G_complete_num<-apply(SNP_1000G_complete,1,as.numeric)
+SNP_1000G_num<-apply(SNP_1000G_2,2,as.numeric)
+rownames(SNP_1000G_num)<-merge_data$snp_id
+colnames(SNP_1000G_num)<-colnames(SNP_1000G)
 
-save(SNP_1000G_complete_num,file="/Users/Pinedasans/Catalyst/Data/Genotyping/SNP_1000G_PCA.Rdata")
+save(SNP_1000G_num,file="/Users/Pinedasans/Catalyst/Data/Genotyping/SNP_1000G_PCA.Rdata")
 ###Run PCA in the server
 
 load("/Users/Pinedasans/Catalyst/Results/Validation/pca_val.Rdata")
@@ -108,12 +108,12 @@ id.1000G<-match(rownames(pca$x),sample1000g$Sample_name)
 SPP <- sample1000g$Superpopulation_code[id.1000G]
 SPP <-addNA(SPP)
 levels.SPP <- factor(c("AFR","AMR","EAS","EUR","SAS","GWAS"))
-COLOR <- c(2:6,1)
+COLOR <- c(2:5,6)
 
 
 pc <- c(1,2)
-plot(pca$x[,pc[1]][1:2563], pca$x[,pc[2]][1:2563], col=COLOR[SPP],pch=20,xlab="PCA2",ylab="PCA1")
-legend(250,150, legend=levels(levels.SPP), col=COLOR,pch=20,cex=0.8)
+plot(pca$x[,pc[1]][1023:3526], pca$x[,pc[2]][1023:3526], col=COLOR[SPP],pch=20,xlab="PCA2",ylab="PCA1")
+legend(115,-40, legend=levels.SPP, col=COLOR,pch=20,cex=0.8)
 #text(pca$x[2505:2559,pc[1]], pca$x[2505:2559,pc[2]],labels=rownames(pca$x)[2505:2559],cex=0.8,col=1)
 library("zoom")
 zm()
