@@ -128,11 +128,11 @@ calls_genotypes_autosome<-calls_genotypes[na.omit(id.snp.aut),] ##836,872 (final
 ####################################################
 ## Prepare data with the annotation from samples ###
 ####################################################
-annot_sample<-read.table("/Users/Pinedasans/Catalyst/Data/Genotyping/annot_samples.txt",header = T,sep="\t")
+annot_sample<-read.table("/Users/Pinedasans/Catalyst/Data/Genotyping/annot_2.txt",header=T,sep="\t")
 samples_split<-strsplit(colnames(calls_genotypes_autosome), "[.]")
 samples_names<-unlist(lapply(samples_split, `[[`, 1))
 id.samples_calls<-match(annot_sample$CEL.file,samples_names)
-SNP_calls<-calls_genotypes_autosome[,na.omit(id.samples_calls)] #1,513 samples (
+SNP_calls<-calls_genotypes_autosome[,na.omit(id.samples_calls)] #1,721 samples (
 colnames(SNP_calls)<-annot_sample$CEL.file[which(is.na(id.samples_calls)==F)]
 id.samples_annot<-match(colnames(SNP_calls),annot_sample$CEL.file)
 annot_sample_2<-annot_sample[id.samples_annot,]
@@ -140,55 +140,52 @@ annot_sample_3<-annot_sample_2[order(annot_sample_2$PairID,annot_sample_2$D.R),]
 write.table(annot_sample_3,"/Users/Pinedasans/Catalyst/Data/Genotyping/annot_samples_to_delete.txt",row.names = F)
 
 ##After deleting the CAN samples
-annot_sample_ARTX<-read.table("/Users/Pinedasans/Catalyst/Data/Genotyping/annot_samples_ARTX.txt",header=T,sep="\t")
+annot_sample_ARTXCAN<-read.table("/Users/Pinedasans/Catalyst/Data/Genotyping/annot_samples_ARTXCAN.txt",header=T,sep="\t")
 i=1
 annot_samplePaired<-NULL
-while (i <=nrow(annot_sample_ARTX)) {
+while (i <=nrow(annot_sample_ARTXCAN)) {
   print(i)
-  if(annot_sample_ARTX$PairID[i]==annot_sample_ARTX$PairID[i+1]){
-    annot_samplePaired<-rbind(annot_samplePaired,annot_sample_ARTX[i:(i+1),])
+  if(annot_sample_ARTXCAN$PairID[i]==annot_sample_ARTXCAN$PairID[i+1]){
+    annot_samplePaired<-rbind(annot_samplePaired,annot_sample_ARTXCAN[i:(i+1),])
     i=i+2
   } else {
       i=i+1
   }
 }
-###1,022 samples paired
+###1,472 samples paired
 
 id.snp_paired<-match(annot_samplePaired$CEL.file,colnames(SNP_calls))
-SNP_calls_paired<-SNP_calls[,id.snp_paired] #836,872   1,022 final set 
+SNP_calls_paired<-SNP_calls[,id.snp_paired] #836,872   1,326 final set 
 
 ###To obtain the variable with the difference
-non.list<-seq(1,1022,2)
+non.list<-seq(1,1326,2)
 SNP_calls_diff<-apply(SNP_calls_paired,1,function(x) abs(diff(x))[non.list])
-SNP_calls_diff2<-apply(SNP_calls_diff,2,function(x) replace(x,x==2,1))
+SNP_calls_diff2<-apply(SNP_calls_diff,2,function(x) replace(x,x==2,1)) #663 836872
+
+###To obtain a mismatch variable for ethnicity 
+race_mismatch<-rep(NA,nrow(annot_samplePaired))
+while(i <=nrow(annot_samplePaired)){
+  if(is.na(annot_samplePaired$calculated.ethnicity..99..[i])==F & is.na(annot_samplePaired$calculated.ethnicity..99..[(i+1)])==F){
+    if (annot_samplePaired$calculated.ethnicity..99..[i]==annot_samplePaired$calculated.ethnicity..99..[(i+1)]){
+      race_mismatch[i:(i+1)]<-0
+    } else{
+      race_mismatch[i:(i+1)]<-1
+    }
+  }
+ i=i+2
+}
+annot_samplePaired$race_mismatch<-race_mismatch
 
 save(SNP_calls_paired,SNP_calls_diff2,annot_samplePaired,annot,file="/Users/Pinedasans/Catalyst/Data/Genotyping/Genotyping_QC.Rdata")
 
 
-##CAN samples are together with the AR samples 
-annot_sample_ARCAN_TX<-read.table("/Users/Pinedasans/Catalyst/Data/Genotyping/annot_samples_to_ARTXwithCANasAR.txt",header=T,sep="\t")
-i=1
-annot_samplePaired<-NULL
-while (i <=nrow(annot_sample_ARCAN_TX)) {
-print(i)
-if(annot_sample_ARCAN_TX$PairID[i]==annot_sample_ARCAN_TX$PairID[i+1]){
-  annot_samplePaired<-rbind(annot_samplePaired,annot_sample_ARCAN_TX[i:(i+1),])
-  i=i+2
-} else {
-  i=i+1
-}
-}
-###1,316 samples paired
 
-id.snp_paired<-match(annot_samplePaired$CEL.file,colnames(SNP_calls))
-SNP_calls_paired<-SNP_calls[,id.snp_paired] #836,872   1,316 final set 
 
-###To obtain the variable with the difference
-non.list<-seq(1,1316,2)
-SNP_calls_diff<-apply(SNP_calls_paired,1,function(x) abs(diff(x))[non.list])
-SNP_calls_diff2<-apply(SNP_calls_diff,2,function(x) replace(x,x==2,1))
 
-save(SNP_calls_paired,SNP_calls_diff2,annot_samplePaired,annot,file="/Users/Pinedasans/Catalyst/Data/Genotyping/Genotyping_ARCAN_QC.Rdata")
+
+
+
+
 
 
 
