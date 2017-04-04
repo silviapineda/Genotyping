@@ -42,12 +42,23 @@ plot(pca, type = "l")
 SPP <- annot_samplePaired$Outcome
 #SPP <-addNA(SPP)
 #levels.SPP <- factor(c("Rej","NoRej"))
-COLOR <- c(2:3)
+COLOR <- c(1:4)
 
 pc <- c(1,2)
 plot(pca$x[,pc[1]], pca$x[,pc[2]], col=COLOR[SPP],pch=20,xlab="PCA1",ylab="PCA2")
-legend(-200,-140, legend=levels(SPP), col=COLOR,pch=20,cex=0.8)
+legend(150,150, legend=levels(SPP), col=COLOR,pch=20,cex=0.8)
 
+##Obtain a mesuare of distance in the plot
+PCA1<-pca$x[,pc[1]]
+PCA2<-pca$x[,pc[2]]
+non.list<-seq(1,1326,2)
+x1<-PCA1[non.list]
+y1<-PCA2[non.list]
+x2<-PCA1[non.list+1]
+y2<-PCA1[non.list+1]
+
+Distance <- sqrt(((x2-x1)^2)+((y2-y1)^2))
+write.table(Distance,"/Users/Pinedasans/Catalyst/Results/Validation/DistancesPCA.txt")
 
 
 ##########################################################
