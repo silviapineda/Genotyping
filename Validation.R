@@ -16,6 +16,8 @@ print(x)
 ### Author: Silvia Pineda
 ### Date: MArch, 2016
 ############################################################################################
+library("randomForest")
+library("RColorBrewer")
 
 
 setwd("/Users/Pinedasans/Catalyst/Results/Validation/")
@@ -37,60 +39,81 @@ SNP_calls_diff_mafQC<-SNP_calls_diff2_maf[,which(maf2>0.01)] #801,977
 id.snp<-match(colnames(SNP_calls_diff_mafQC),annot$SNP_id)
 annot_snp_mafQC<-annot[na.omit(id.snp),]
 
+##rsNames into colnames
+#colnames(SNP_calls_diff_mafQC)<-annot[na.omit(id.snp),2]
+#
+
+###To put ARCAN in AR
+annot_samplePaired$Outcome<-replace(annot_samplePaired$Outcome,annot_samplePaired$Outcome=="ARCAN","AR")
+annot_samplePaired$Outcome<-factor(annot_samplePaired$Outcome)
+
+save(SNP_calls_diff_mafQC,annot_samplePaired,file="/Users/Pinedasans/Catalyst/Data/Genotyping/SNP_calls_diff.Rdata")
+
+##Impute data
+SNP_calls_diff_imputed<-rfImpute(SNP_calls_diff_mafQC,annot_samplePaired$Outcome[non.list])
+##This needs to run in the server
 
 ############################
 #### Validation with RF ###
 ############################
-library("randomForest")
-library("RColorBrewer")
+
+load("/Users/Pinedasans/Catalyst/Data/Genotyping/SNP_calls_diff_imputed.Rdata")
 
 ###########################
 ###results from Fisher ####
 ###########################
 resultsFisher<-read.table("/Users/Pinedasans/Catalyst/Results/ResultsEndpointFisherTest.txt",header=T,sep="\t")
+#############################
+##  Variants that overlap ##
+###########################
+merge_results<-merge(resultsFisher,annot_snp_mafQC,by.x = c("Chr","Start"),by.y = c("Chr","Pos"))
+id.snp<-match(merge_results$SNP_id,colnames(SNP_calls_diff_mafQC))
+SNP_rf_selected<-SNP_calls_diff_mafQC[,id.snp]
 
-#Variants that overlap
-id.snp_rs<-match(resultsFisher$snp138,annot_snp_mafQC$SNP_rs)
-SNP_rf_selected<-SNP_calls_diff_mafQC[,na.omit(id.snp_rs)]
 
-rf_output_total <- randomForest(annot_samplePaired$Outcome[non.list]~.,data=data.frame(SNP_rf_selected),proximity=TRUE,na.action=na.roughfix)
+##Save this variants to plot in ExomeSeq
+write.table(colnames(SNP_rf_selected),"/Users/Pinedasans/Catalyst/Data/Genotyping/19variantsOverlapping.txt",sep="\t")
+
+SNP_rf_selected_imputed<-rfImpute(SNP_rf_selected,annot_samplePaired$Outcome[non.list])
+rf_output_total <- randomForest(annot_samplePaired$Outcome[non.list]~.,data=data.frame(SNP_rf_selected_imputed),proximity=TRUE,na.action=na.roughfix)
 
 COLOR=brewer.pal(3,"Set1")
 MDSplot(rf_output_total, annot_samplePaired$Outcome[non.list],palette = COLOR,main = "19variants Overlap")
 legend("bottomleft", legend=levels(annot_samplePaired$Outcome[non.list]),col=COLOR, pch = 20)
 
-###Genes that Overlap
-id.gene<-match(resultsFisher$Gene.refGene,annot_snp_mafQC$gene.name)
-id.snp<-match(annot_snp_mafQC$SNP_id[id.gene],colnames(SNP_calls_diff_mafQC))
-SNP_rf_selected<-SNP_calls_diff_mafQC[,na.omit(id.snp)] #108 variants
-rf_output_total <- randomForest(annot_samplePaired$Outcome[non.list]~.,data=data.frame(SNP_rf_selected),proximity=TRUE,na.action=na.roughfix)
-
-COLOR=brewer.pal(3,"Set1")
-MDSplot(rf_output_total, annot_samplePaired$Outcome[non.list],palette = COLOR,main = "Genes Overlap Fisher")
-legend("bottomleft", legend=levels(annot_samplePaired$Outcome[non.list]),col=COLOR, pch = 20)
-
 #####Plotting MDS 
 d <- dist(SNP_rf_selected) # euclidean distances between the rows
-fit <- cmdscale(d,eig=TRUE, k=2) # k is the number of dim
+fit <- cmdscale(d,eig=TRUE, k=3) # k is the number of dim
 x <- fit$points[,1]
 y <- fit$points[,2]
 
+par(mfrow = c(2, 2))
 ##by endpoint
 COLOR==brewer.pal(3,"Set1")
 plot(x, y, xlab="Coordinate 1", ylab="Coordinate 2",col=COLOR[factor(annot_samplePaired$Outcome[non.list])], 
-     main="19 variants",pch=20)
+     main="Endpoint",pch=20)
 legend("topright", legend=levels(annot_samplePaired$Outcome[non.list]), col=COLOR,pch=20)
 
 ##by race mismatch
 COLOR==brewer.pal(3,"Set1")
-plot(x, y, xlab="Coordinate 1", ylab="Coordinate 2",col=COLOR[factor(annot_samplePaired$race_mismatch[non.list])], 
-     main="19 variants",pch=20)
-legend("topright", legend=c("race match","race mismatch"), col=COLOR,pch=20)
+plot(x, y, xlab="Coordinate 1", ylab="Coordinate 2",col=COLOR[factor(annot_samplePaired$race_mismatch[non.list],exclude = NULL)], 
+     main="Race Mismatch",pch=20)
+legend("topright", legend=c("race match","race mismatch","NA"), col=COLOR,pch=20)
+
+##by distance
+Distance<-read.table("/Users/Pinedasans/Catalyst/Results/Validation/DistancesPCA.txt")
+
+Distance$cat<-ifelse(Distance$x<=13,1,
+                     ifelse(Distance$x>13 & Distance$x<=76,2,3))
+COLOR==brewer.pal(3,"Set1")
+plot(x, y, xlab="Coordinate 1", ylab="Coordinate 2",col=COLOR[factor(Distance$cat)], 
+     main="Distance Categ PCA ",pch=20)
+legend("topright", legend=levels(factor(Distance$cat)), col=COLOR,pch=20)
 
 ##by center
 COLOR=brewer.pal(21,"Set1")
 plot(x, y, xlab="Coordinate 1", ylab="Coordinate 2",col=COLOR[factor(annot_samplePaired$Center[non.list])], 
-     main="19 variants",pch=20)
+     main="Center",pch=20)
 legend("topright", legend=levels(factor(annot_samplePaired$Center[non.list])), col=COLOR,pch=20)
 
 ####by batch
@@ -100,64 +123,104 @@ plate <- substr(rownames(SNP_calls_diff_mafQC), 12, 13) #1
 
 COLOR=brewer.pal(21,"Set1")
 plot(x, y, xlab="Coordinate 1", ylab="Coordinate 2",col=COLOR[factor(plate)], 
-     main="19 variants",pch=20)
+     main="Batchs",pch=20)
 legend("topright", legend=levels(factor(plate)), col=COLOR,pch=20)
 
-####by HLA region
-#Variants that overlap
+dev.off()
+
+##########################
+### Genes that Overlap ###
+#########################
+id.gene<-match(unique(resultsFisher$Gene.refGene),annot_snp_mafQC$gene.name)
+genes_overlap<-annot_snp_mafQC$gene.name[na.omit(id.gene)] #79 genes overlap
+
+annot_snp_mafQC_genes_overlap<-NULL
+for (i in 1:length(genes_overlap)){
+  print(i)
+  annot_snp_mafQC_genes_overlap<-rbind(annot_snp_mafQC_genes_overlap,annot_snp_mafQC[which(annot_snp_mafQC$gene.name==genes_overlap[i]),])
+}
+
+##4,739 variants within that genes
+id.snp<-match(annot_snp_mafQC_genes_overlap$SNP_rs,colnames(SNP_calls_diff_mafQC))
+SNP_rf_selected<-SNP_calls_diff_mafQC[,na.omit(id.snp)] #4739 variants
+rf_output_total <- randomForest(annot_samplePaired$Outcome[non.list]~.,data=data.frame(SNP_rf_selected),proximity=TRUE,na.action=na.roughfix)
+
+COLOR=brewer.pal(3,"Set1")
+MDSplot(rf_output_total, annot_samplePaired$Outcome[non.list],palette = COLOR,main = "Genes Overlap")
+legend("bottomright", legend=levels(annot_samplePaired$Outcome[non.list]),col=COLOR, pch = 20)
+
+####################
+## by HLA region ##
+##################
+
 id.hla<-grep("HLA",annot_snp_mafQC$gene.name)
-SNP_rf_selected<-SNP_calls_diff_mafQC[,na.omit(id.hla)]
+id.hla.2<-match(annot_snp_mafQC$SNP_id[id.hla],colnames(SNP_calls_diff_mafQC))
+SNP_rf_selected<-SNP_calls_diff_mafQC[,na.omit(id.hla.2)] #376 variants
 
 rf_output_total <- randomForest(annot_samplePaired$Outcome[non.list]~.,data=data.frame(SNP_rf_selected),proximity=TRUE,na.action=na.roughfix)
 
 COLOR=brewer.pal(3,"Set1")
-MDSplot(rf_output_total, annot_samplePaired$Outcome[non.list],palette = COLOR,main = "19variants Overlap")
+MDSplot(rf_output_total, annot_samplePaired$Outcome[non.list],palette = COLOR,main = "HLA")
 legend("bottomleft", legend=levels(annot_samplePaired$Outcome[non.list]),col=COLOR, pch = 20)
 
 ##by race mismatch
 d <- dist(SNP_rf_selected) # euclidean distances between the rows
-fit <- cmdscale(d,eig=TRUE, k=2) # k is the number of dim
+fit <- cmdscale(d,eig=TRUE, k=3) # k is the number of dim
 x <- fit$points[,1]
 y <- fit$points[,2]
 
 COLOR==brewer.pal(3,"Set1")
-plot(x, y, xlab="Coordinate 1", ylab="Coordinate 2",col=COLOR[factor(annot_samplePaired$race_mismatch[non.list])], 
-     main="19 variants",pch=20)
-legend("topright", legend=c("race match","race mismatch"), col=COLOR,pch=20)
+plot(x, y, xlab="Coordinate 1", ylab="Coordinate 2",col=COLOR[factor(annot_samplePaired$race_mismatch[non.list],exclude = NULL)], 
+     main="HLA variants",pch=20)
+legend("topright", legend=c("race match","race mismatch","NA"), col=COLOR,pch=20)
+
+##by distance
+COLOR==brewer.pal(3,"Set1")
+plot(x, y, xlab="Coordinate 1", ylab="Coordinate 2",col=COLOR[factor(Distance$cat)], 
+     main="Dist - 19 variants",pch=20)
+legend("topright", legend=levels(factor(Distance$cat)), col=COLOR,pch=20)
 
 
 #######################
 ##  results from RF ##
 ######################
 resultsRF<-read.table("/Users/Pinedasans/Catalyst/Results/ResultsEndpointRF.txt",header=T,sep="\t")
+##########################
+# Variants that overlap ##
+##########################
+merge_results<-merge(resultsRF,annot_snp_mafQC,by.x = c("Chr","Start"),by.y = c("Chr","Pos"))
+id.snp<-match(merge_results$SNP_id,colnames(SNP_calls_diff_mafQC))
+SNP_rf_selected<-SNP_calls_diff_mafQC[,id.snp] ##11 variants
 
-#Variants that overlap
-id.snp_rs<-match(resultsRF$snp138,annot_snp_mafQC$SNP_rs)
-SNP_rf_selected<-SNP_calls_diff_mafQC[,na.omit(id.snp_rs)]
+##Save this variants to plot in ExomeSeq
+write.table(colnames(SNP_rf_selected),"/Users/Pinedasans/Catalyst/Data/Genotyping/13variantsOverlapping.txt",sep="\t")
 
 rf_output_total <- randomForest(annot_samplePaired$Outcome[non.list]~.,data=data.frame(SNP_rf_selected),proximity=TRUE,na.action=na.roughfix)
 
 COLOR=brewer.pal(3,"Set1")
 MDSplot(rf_output_total, annot_samplePaired$Outcome[non.list],palette = COLOR,main = "11variants Overlap")
-legend("bottomleft", legend=levels(annot_samplePaired$Outcome[non.list]),col=COLOR, pch = 20)
+legend("bottomright", legend=levels(annot_samplePaired$Outcome[non.list]),col=COLOR, pch = 20)
 
+#####################
+## Genes Overlap ###
+###################
+id.gene<-match(unique(resultsRF$Gene.refGene),annot_snp_mafQC$gene.name)
+genes_overlap<-annot_snp_mafQC$gene.name[na.omit(id.gene)] #43 genes overlap
 
-###Genes Overlap
-id.gene<-match(resultsRF$Gene.refGene,annot_snp_mafQC$gene.name)
-SNP_rf_selected<-SNP_calls_diff_mafQC[,na.omit(id.gene)] #56 variants
+annot_snp_mafQC_genes_overlap<-NULL
+for (i in 1:length(genes_overlap)){
+  print(i)
+  annot_snp_mafQC_genes_overlap<-rbind(annot_snp_mafQC_genes_overlap,annot_snp_mafQC[which(annot_snp_mafQC$gene.name==genes_overlap[i]),])
+}
+##2,735 variants within that genes
+id.snp<-match(annot_snp_mafQC_genes_overlap$SNP_rs,colnames(SNP_calls_diff_mafQC))
+SNP_rf_selected<-SNP_calls_diff_mafQC[,na.omit(id.snp)] #2,735 variants
+
 rf_output_total <- randomForest(annot_samplePaired$Outcome[non.list]~.,data=data.frame(SNP_rf_selected),proximity=TRUE,na.action=na.roughfix)
 
 COLOR=brewer.pal(3,"Set1")
-MDSplot(rf_output_total, annot_samplePaired$Outcome[non.list],palette = COLOR,main = "Genes Overlap RF")
-legend("bottomleft", legend=levels(annot_samplePaired$Outcome[non.list]),col=COLOR, pch = 20)
-
-###Randomly 108 variants 
-SNP_rf_selected<-SNP_calls_diff_mafQC[,sample(ncol(SNP_calls_diff_mafQC),108)] #108 variants
-rf_output_total <- randomForest(annot_samplePaired$Outcome[non.list]~.,data=data.frame(SNP_rf_selected),proximity=TRUE,na.action=na.roughfix)
-
-COLOR=brewer.pal(3,"Set1")
-MDSplot(rf_output_total, annot_samplePaired$Outcome[non.list],palette = COLOR,main = "108 random variants")
-legend("bottomleft", legend=levels(annot_samplePaired$Outcome[non.list]),col=COLOR, pch = 20)
+MDSplot(rf_output_total, annot_samplePaired$Outcome[non.list],palette = COLOR,main = "GenesOverlap RF")
+legend("bottomright", legend=levels(annot_samplePaired$Outcome[non.list]),col=COLOR, pch = 20)
 
 
 ################################################
@@ -165,30 +228,75 @@ legend("bottomleft", legend=levels(annot_samplePaired$Outcome[non.list]),col=COL
 ################################################
 
 ###Runnning Logistic Regression to find significant variants
-OR<-rep(NA,ncol(SNP_calls_diff_mafQC))
-p.value.OR<-rep(NA,ncol(SNP_calls_diff_mafQC))
+p.value<-rep(NA,ncol(SNP_calls_diff_mafQC))
 for (i in 1:ncol(SNP_calls_diff_mafQC)){
   print(i)
-  tab<-table(SNP_calls_diff2[,i])
-  if(length(tab)>1){
-    model<-glm(annot_samplePaired$Outcome[non.list]~SNP_calls_diff_mafQC[,i],family = "binomial")
-    OR[i]<-exp(coef(model))[2]
-    p.value.OR[i]<-coefficients(summary(model))[2,4]
+  tab<-table(SNP_calls_diff_mafQC[,i],annot_samplePaired$Outcome[non.list])
+  if(dim(tab)[1]>1){
+    p.value[i]<-fisher.test(tab)$p.value
   }
 }
 
-write.table(cbind(OR,p.value.OR),"logisticRegressionMAFQC.txt")
-results_reg<-read.table("logisticRegressionMAFQC.txt")
-rownames(results_reg)<-colnames(SNP_calls_diff_mafQC)
-results_reg_sign<-results_reg[results_reg$p.value.OR<0.001,] ##1174
-id.snp<-match(rownames(results_reg_sign),colnames(SNP_calls_diff_mafQC))
-SNP_rf_selected<-SNP_calls_diff_mafQC[,na.omit(id.snp)]
+write.table(p.value,"FisherExactTest.txt")
+p.value<-read.table("FisherExactTest.txt")
+p.value<-p.value[,1]
+names(p.value)<-colnames(SNP_calls_diff_mafQC)
+SNP_calls_diff_sign<-SNP_calls_diff_mafQC[,p.value<0.001] ##1589
 
-rf_output_total <- randomForest(annot_samplePaired$Outcome[non.list]~.,data=data.frame(SNP_rf_selected),proximity=TRUE,na.action=na.roughfix)
 
+rf_output_total <- randomForest(annot_samplePaired$Outcome[non.list]~.,data=data.frame(SNP_calls_diff_sign),proximity=TRUE,na.action=na.roughfix)
 COLOR=brewer.pal(3,"Set1")
 MDSplot(rf_output_total, annot_samplePaired$Outcome[non.list],palette = COLOR,main = "SignificantVariants")
-legend("bottomleft", legend=levels(annot_samplePaired$Outcome[non.list]),col=COLOR, pch = 20)
+legend("topright", legend=levels(annot_samplePaired$Outcome[non.list]),col=COLOR, pch = 20)
+
+library("VSURF")
+set.seed(2)
+##We have imputed missing values 
+SNP_rf_selected_imputed<-rfImpute(SNP_calls_diff_sign,annot_samplePaired$Outcome[non.list])
+annot_sample_outcome<-annot_samplePaired$Outcome[non.list]
+rf_output_total <- randomForest(annot_sample_outcome~.,data=data.frame(SNP_rf_selected_imputed),proximity=TRUE)
+
+save(SNP_rf_selected_imputed,annot_sample_outcome,file="/Users/Pinedasans/Catalyst/Data/VSRUF_val.Rdata")
+#fit<-VSURF(x = data.frame(SNP_rf_selected_imputed[,-1]), y=annot_sample_outcome_ARTX_2,parallel = TRUE,ncores=3)
+load("ResultsVal_RF.Rdata")
+rf_output_total <- randomForest(annot_samplePaired$Outcome[non.list]~.,
+                                data=data.frame(SNP_rf_selected_imputed[,fit$varselect.thres])
+                                ,proximity=TRUE,na.action=na.roughfix)
+COLOR=brewer.pal(3,"Set1")
+MDSplot(rf_output_total, annot_samplePaired$Outcome[non.list],palette = COLOR,main = "SignificantVariants")
+
+
+
+
+#########################################
+### Apply clustering with all the data ##
+#########################################
+d <- dist(as.matrix(SNP_calls_diff_mafQC))   # find distance matrix 
+load("/Users/Pinedasans/Catalyst/Results/Validation/Distance.Rdata")
+hc <- hclust(d)                # apply hirarchical clustering 
+plot(hc)     
+
+grp <- cutree(hc, k = 6)
+
+plot(hc, cex = 0.2) # plot tree
+rect.hclust(hc, k = 4, border = 2:4) # add rectangle
+
+rf_output_total <- randomForest(factor(grp)~.,data=data.frame(SNP_rf_selected),proximity=TRUE,na.action=na.roughfix)
+
+COLOR=brewer.pal(6,"Set1")
+MDSplot(rf_output_total, factor(grp),palette = COLOR,main = "19variants Overlap")
+legend("bottomleft", legend=levels(factor(grp)),col=COLOR, pch = 20)
+
+
+
+
+
+
+
+
+
+
+
 
 
 #############
@@ -216,18 +324,22 @@ legend("bottomleft", legend=levels(demographics$phenotype[non.list]),col=COLOR, 
 
 
 
-
-##Count number of variants per pair that are DIFFERENT
+############################################################
+##  Count number of variants per pair that are DIFFERENT  ##
+############################################################
 variant_mismatch <- NULL
-for (i in 1:511) {
+for (i in 1:663) {
   print(i)
   variant_mismatch[i]<- table(SNP_calls_diff_mafQC[i,]==1)[2]
 }
 write.table(variant_mismatch,"/Users/Pinedasans/Catalyst/Results/Validation/variant_mismatch_MAFfilter.txt")
 
-boxplot(variant_mismatch~annot_samplePaired$Outcome[non.list],frame.plot = FALSE,col=c("goldenrod","darkolivegreen4"),
+COLOR=brewer.pal(3,"Set1")
+boxplot(variant_mismatch~annot_samplePaired$Outcome[non.list],frame.plot = FALSE,col=COLOR,
         ylab="Num Variants Differ")
-anova(lm(variant_mismatch~annot_samplePaired$Outcome[non.list])) #p-value = 0.13
+summary(lm(variant_mismatch~annot_samplePaired$Outcome[non.list])) #p-value (AR vs CAN) = 0.001 
+                                                                   #p-value (CAN vs TX) = 0.1
+
 
 ##ICAM1-rs5030351-SNP_A-8348664
 variantMismatch<-SNP_calls_diff2[,509897]
