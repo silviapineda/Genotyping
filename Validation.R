@@ -22,42 +22,48 @@ library("RColorBrewer")
 
 setwd("/Users/Pinedasans/Catalyst/Results/Validation/")
 
-load("/Users/Pinedasans/Catalyst/Data/Genotyping/Genotyping_QC.Rdata")
-non.list<-seq(1,1326,2)
 
+##This is to prepare data
 
-###To pass a QC on MAF
-load("/Users/Pinedasans/Catalyst/Data/Genotyping/MAF_HEW.Rdata")
-p.value_hwe_adj<-p.adjust(p.value_hwe,"bonferroni") #389,637 with fdr 131,558 with bonferroni pass the MT correction and are not in HWE
-table(maf<0.01) #12,739 has a maf<0.01 and 138,999 has a maf<0.05
-
-id.maf<-match(names(maf),colnames(SNP_calls_diff2))
-SNP_calls_diff2_maf<-SNP_calls_diff2[,na.omit(id.maf)]
-maf2<-maf[which(is.na(id.maf)==F)]
-SNP_calls_diff_mafQC<-SNP_calls_diff2_maf[,which(maf2>0.01)] #801,977
-
-id.snp<-match(colnames(SNP_calls_diff_mafQC),annot$SNP_id)
-annot_snp_mafQC<-annot[na.omit(id.snp),]
-
-##rsNames into colnames
-#colnames(SNP_calls_diff_mafQC)<-annot[na.omit(id.snp),2]
-#
-
-###To put ARCAN in AR
-annot_samplePaired$Outcome<-replace(annot_samplePaired$Outcome,annot_samplePaired$Outcome=="ARCAN","AR")
-annot_samplePaired$Outcome<-factor(annot_samplePaired$Outcome)
-
-save(SNP_calls_diff_mafQC,annot_samplePaired,file="/Users/Pinedasans/Catalyst/Data/Genotyping/SNP_calls_diff.Rdata")
-
-##Impute data
-SNP_calls_diff_imputed<-rfImpute(SNP_calls_diff_mafQC,annot_samplePaired$Outcome[non.list])
-##This needs to run in the server
+#load("/Users/Pinedasans/Catalyst/Data/Genotyping/Genotyping_QC.Rdata")
+# non.list<-seq(1,1326,2)
+# 
+# 
+# ###To pass a QC on MAF
+# load("/Users/Pinedasans/Catalyst/Data/Genotyping/MAF_HEW.Rdata")
+# p.value_hwe_adj<-p.adjust(p.value_hwe,"bonferroni") #389,637 with fdr 131,558 with bonferroni pass the MT correction and are not in HWE
+# table(maf<0.01) #12,739 has a maf<0.01 and 138,999 has a maf<0.05
+# 
+# id.maf<-match(names(maf),colnames(SNP_calls_diff2))
+# SNP_calls_diff2_maf<-SNP_calls_diff2[,na.omit(id.maf)]
+# maf2<-maf[which(is.na(id.maf)==F)]
+# SNP_calls_diff_mafQC<-SNP_calls_diff2_maf[,which(maf2>0.01)] #801,977
+# 
+# id.snp<-match(colnames(SNP_calls_diff_mafQC),annot$SNP_id)
+# annot_snp_mafQC<-annot[na.omit(id.snp),]
+# 
+# ##rsNames into colnames
+# #colnames(SNP_calls_diff_mafQC)<-annot[na.omit(id.snp),2]
+# #
+# 
+# ###To put ARCAN in AR
+# annot_samplePaired$Outcome<-replace(annot_samplePaired$Outcome,annot_samplePaired$Outcome=="ARCAN","AR")
+# annot_samplePaired$Outcome<-factor(annot_samplePaired$Outcome)
+# 
+# save(SNP_calls_diff_mafQC,annot_samplePaired,file="/Users/Pinedasans/Catalyst/Data/Genotyping/SNP_calls_diff.Rdata")
+# 
+# ##Impute data
+# SNP_calls_diff_imputed<-rfImpute(SNP_calls_diff_mafQC,annot_samplePaired$Outcome[non.list])
+# ##This needs to run in the server
 
 ############################
 #### Validation with RF ###
 ############################
 
 load("/Users/Pinedasans/Catalyst/Data/Genotyping/SNP_calls_diff_imputed.Rdata")
+SNP_calls_diff_imputed<-SNP_calls_diff_imputed[,-1]
+load("/Users/Pinedasans/Catalyst/Data/Genotyping/SNP_calls_diff.Rdata")
+non.list<-seq(1,1326,2)
 
 ###########################
 ###results from Fisher ####
@@ -67,15 +73,14 @@ resultsFisher<-read.table("/Users/Pinedasans/Catalyst/Results/ResultsEndpointFis
 ##  Variants that overlap ##
 ###########################
 merge_results<-merge(resultsFisher,annot_snp_mafQC,by.x = c("Chr","Start"),by.y = c("Chr","Pos"))
-id.snp<-match(merge_results$SNP_id,colnames(SNP_calls_diff_mafQC))
-SNP_rf_selected<-SNP_calls_diff_mafQC[,id.snp]
+id.snp<-match(merge_results$SNP_id,colnames(SNP_calls_diff_imputed))
+SNP_rf_selected<-SNP_calls_diff_imputed[,id.snp]
 
 
 ##Save this variants to plot in ExomeSeq
 write.table(colnames(SNP_rf_selected),"/Users/Pinedasans/Catalyst/Data/Genotyping/19variantsOverlapping.txt",sep="\t")
 
-SNP_rf_selected_imputed<-rfImpute(SNP_rf_selected,annot_samplePaired$Outcome[non.list])
-rf_output_total <- randomForest(annot_samplePaired$Outcome[non.list]~.,data=data.frame(SNP_rf_selected_imputed),proximity=TRUE,na.action=na.roughfix)
+rf_output_total <- randomForest(annot_samplePaired$Outcome[non.list]~.,data=data.frame(SNP_rf_selected),proximity=TRUE)
 
 COLOR=brewer.pal(3,"Set1")
 MDSplot(rf_output_total, annot_samplePaired$Outcome[non.list],palette = COLOR,main = "19variants Overlap")
@@ -189,13 +194,13 @@ resultsRF<-read.table("/Users/Pinedasans/Catalyst/Results/ResultsEndpointRF.txt"
 # Variants that overlap ##
 ##########################
 merge_results<-merge(resultsRF,annot_snp_mafQC,by.x = c("Chr","Start"),by.y = c("Chr","Pos"))
-id.snp<-match(merge_results$SNP_id,colnames(SNP_calls_diff_mafQC))
-SNP_rf_selected<-SNP_calls_diff_mafQC[,id.snp] ##11 variants
+id.snp<-match(merge_results$SNP_id,colnames(SNP_calls_diff_imputed))
+SNP_rf_selected<-SNP_calls_diff_imputed[,id.snp] ##11 variants
 
 ##Save this variants to plot in ExomeSeq
 write.table(colnames(SNP_rf_selected),"/Users/Pinedasans/Catalyst/Data/Genotyping/13variantsOverlapping.txt",sep="\t")
 
-rf_output_total <- randomForest(annot_samplePaired$Outcome[non.list]~.,data=data.frame(SNP_rf_selected),proximity=TRUE,na.action=na.roughfix)
+rf_output_total <- randomForest(annot_samplePaired$Outcome[non.list]~.,data=data.frame(SNP_rf_selected),proximity=TRUE)
 
 COLOR=brewer.pal(3,"Set1")
 MDSplot(rf_output_total, annot_samplePaired$Outcome[non.list],palette = COLOR,main = "11variants Overlap")
@@ -240,11 +245,11 @@ for (i in 1:ncol(SNP_calls_diff_mafQC)){
 write.table(p.value,"FisherExactTest.txt")
 p.value<-read.table("FisherExactTest.txt")
 p.value<-p.value[,1]
-names(p.value)<-colnames(SNP_calls_diff_mafQC)
-SNP_calls_diff_sign<-SNP_calls_diff_mafQC[,p.value<0.001] ##1589
+names(p.value)<-colnames(SNP_calls_diff_imputed)
+SNP_calls_diff_sign<-SNP_calls_diff_imputed[,p.value<0.001] ##1589
 
 
-rf_output_total <- randomForest(annot_samplePaired$Outcome[non.list]~.,data=data.frame(SNP_calls_diff_sign),proximity=TRUE,na.action=na.roughfix)
+rf_output_total <- randomForest(annot_samplePaired$Outcome[non.list]~.,data=data.frame(SNP_calls_diff_sign),proximity=TRUE)
 COLOR=brewer.pal(3,"Set1")
 MDSplot(rf_output_total, annot_samplePaired$Outcome[non.list],palette = COLOR,main = "SignificantVariants")
 legend("topright", legend=levels(annot_samplePaired$Outcome[non.list]),col=COLOR, pch = 20)
