@@ -25,11 +25,11 @@ setwd("/Users/Pinedasans/Catalyst/Results/Validation/")
 
 ##This is to prepare data
 
-#load("/Users/Pinedasans/Catalyst/Data/Genotyping/Genotyping_QC.Rdata")
-# non.list<-seq(1,1326,2)
-# 
-# 
-# ###To pass a QC on MAF
+load("/Users/Pinedasans/Catalyst/Data/Genotyping/Genotyping_QC.Rdata")
+non.list<-seq(1,1326,2)
+
+
+###To pass a QC on MAF
 # load("/Users/Pinedasans/Catalyst/Data/Genotyping/MAF_HEW.Rdata")
 # p.value_hwe_adj<-p.adjust(p.value_hwe,"bonferroni") #389,637 with fdr 131,558 with bonferroni pass the MT correction and are not in HWE
 # table(maf<0.01) #12,739 has a maf<0.01 and 138,999 has a maf<0.05
@@ -50,11 +50,13 @@ setwd("/Users/Pinedasans/Catalyst/Results/Validation/")
 # annot_samplePaired$Outcome<-replace(annot_samplePaired$Outcome,annot_samplePaired$Outcome=="ARCAN","AR")
 # annot_samplePaired$Outcome<-factor(annot_samplePaired$Outcome)
 # 
-# save(SNP_calls_diff_mafQC,annot_samplePaired,file="/Users/Pinedasans/Catalyst/Data/Genotyping/SNP_calls_diff.Rdata")
-# 
-# ##Impute data
-# SNP_calls_diff_imputed<-rfImpute(SNP_calls_diff_mafQC,annot_samplePaired$Outcome[non.list])
-# ##This needs to run in the server
+# save(SNP_calls_diff_mafQC,annot_samplePaired,annot_snp_mafQC,file="/Users/Pinedasans/Catalyst/Data/Genotyping/SNP_calls_diff.Rdata")
+
+##Impute data
+SNP_calls_diff_imputed<-rfImpute(SNP_calls_diff_mafQC,annot_samplePaired$Outcome[non.list])
+##This needs to run in the server
+
+
 
 ############################
 #### Validation with RF ###
@@ -228,11 +230,68 @@ MDSplot(rf_output_total, annot_samplePaired$Outcome[non.list],palette = COLOR,ma
 legend("bottomright", legend=levels(annot_samplePaired$Outcome[non.list]),col=COLOR, pch = 20)
 
 
-################################################
-##RF with  the variants that are sign p<0.001 ##
-################################################
+##############################################################################
+##Running Fisher Exact Test with the entire validation set and Rej vs. NoRej##
+##############################################################################
+load("/Users/Pinedasans/Catalyst/Data/Genotyping/SNP_calls_diff.Rdata")
+non.list<-seq(1,1326,2)
 
-###Runnning Logistic Regression to find significant variants
+annot_samplePaired_2categ<-annot_samplePaired[which(annot_samplePaired$Outcome!="CAN"),]
+id.samples<-match(annot_samplePaired_2categ$CEL.file,rownames(SNP_calls_diff_mafQC))
+SNP_calls_diff_mafQC_2categ<-SNP_calls_diff_mafQC[na.omit(id.samples),]
+non.list<-seq(1,1026,2)
+
+###Runnning Fisher Exact Test
+p.value<-rep(NA,ncol(SNP_calls_diff_mafQC_2categ))
+for (i in 1:ncol(SNP_calls_diff_mafQC_2categ)){
+  print(i)
+  tab<-table(SNP_calls_diff_mafQC_2categ[,i],annot_samplePaired_2categ$Outcome[non.list])
+  if(dim(tab)[1]>1){
+    p.value[i]<-fisher.test(tab)$p.value
+  }
+}
+
+write.table(p.value,"FisherExactTestRejvsNoRej.txt")
+p.value<-read.table("FisherExactTestRejvsNoRej.txt")
+p.value<-p.value[,1]
+names(p.value)<-colnames(SNP_calls_diff_mafQC_2categ)
+SNP_calls_diff_sign<-SNP_calls_diff_mafQC_2categ[,p.value<0.001] ##792
+p.value.sign<-p.value[which(p.value<0.001)]
+resultsFisher<-read.table("/Users/Pinedasans/Catalyst/Results/ResultsEndpointFisherTestSign.txt",header=T,sep="\t")
+id.snps<-match(colnames(SNP_calls_diff_sign),annot$SNP_id)
+write.csv(annot_SNP_sign<-annot[id.snps,],file="FisherSignResutsRejvsNoRej.csv")
+intersect(annot_SNP_sign$SNP_rs,resultsFisher$snp138) #None 
+
+##Plotting manhattan plot
+library("qqman")
+id.man<-match(colnames(SNP_calls_diff_mafQC),annot$SNP_id)
+data.manhattan<-cbind(annot[na.omit(id.man),c(2,3,4)],p.value)
+colnames(data.manhattan)=c("SNP","CHR","BP","P")
+data.manhattan$CHR<-as.numeric(as.character(data.manhattan$CHR))
+data.manhattan.NoNan<-data.manhattan[which(is.na(data.manhattan$P)==F),]
+snpsOfInterest <- data.manhattan.NoNan[which(data.manhattan.NoNan$P<=0.001),1]
+manhattan(data.manhattan.NoNan, ylim = c(0, 8),highlight=snpsOfInterest,suggestiveline = FALSE,genomewideline = FALSE)
+abline(h = -log10(0.001), col = "blue")
+
+#To find the variants very associated
+annot[match(names(p.value[which(p.value<0.00001)]),annot$SNP_id),]
+#   AR     TX
+#0 126    272
+#1  13    102
+
+
+##Running RF with the slected SNPs
+id<-match(colnames(SNP_calls_diff_sign),colnames(SNP_calls_diff_imputed))
+SNP_calls_diff_imputed_sign<-SNP_calls_diff_imputed[,id] ##792
+id2<-match(rownames(SNP_calls_diff_sign),rownames(SNP_calls_diff_imputed_sign))
+SNP_calls_diff_imputed_sign<-SNP_calls_diff_imputed_sign[id2,]
+
+rf_output_total <- randomForest(factor(annot_samplePaired_2categ$Outcome[non.list])~.,data=data.frame(SNP_calls_diff_imputed_sign),proximity=TRUE)
+COLOR=brewer.pal(3,"Set1")
+MDSplot(rf_output_total, factor(annot_samplePaired_2categ$Outcome[non.list]),palette = COLOR[c(1,3)],main = "SignificantVariants")
+legend("topright", legend=levels(factor(annot_samplePaired_2categ$Outcome[non.list])),col=COLOR[c(1,3)], pch = 20)
+
+###Runnning Fisher Exact test considering the three categories
 p.value<-rep(NA,ncol(SNP_calls_diff_mafQC))
 for (i in 1:ncol(SNP_calls_diff_mafQC)){
   print(i)
