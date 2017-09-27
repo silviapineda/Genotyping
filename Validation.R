@@ -29,32 +29,34 @@ load("/Users/Pinedasans/Catalyst/Data/Genotyping/Genotyping_QC.Rdata")
 non.list<-seq(1,1326,2)
 
 
+###Read annotations from Sunil
+annot_sunil<-read.csv("/Users/Pinedasans/Catalyst/Data/Genotyping/Sunil_FinalValidation.csv")
+
+annot_sunil_2<-annot_sunil[which(duplicated(annot_sunil$V1)==F),]
+
+id.common<-match(annot_sunil_2$V1,rownames(SNP_calls_diff2))
+SNP_calls_diff_common<-SNP_calls_diff2[na.omit(id.common),] #36
+annot_sunil_common<-annot_sunil_2[which(is.na(id.common)==F),] #36
+
+
+
 ###To pass a QC on MAF
-# load("/Users/Pinedasans/Catalyst/Data/Genotyping/MAF_HEW.Rdata")
-# p.value_hwe_adj<-p.adjust(p.value_hwe,"bonferroni") #389,637 with fdr 131,558 with bonferroni pass the MT correction and are not in HWE
-# table(maf<0.01) #12,739 has a maf<0.01 and 138,999 has a maf<0.05
-# 
-# id.maf<-match(names(maf),colnames(SNP_calls_diff2))
-# SNP_calls_diff2_maf<-SNP_calls_diff2[,na.omit(id.maf)]
-# maf2<-maf[which(is.na(id.maf)==F)]
-# SNP_calls_diff_mafQC<-SNP_calls_diff2_maf[,which(maf2>0.01)] #801,977
-# 
-# id.snp<-match(colnames(SNP_calls_diff_mafQC),annot$SNP_id)
-# annot_snp_mafQC<-annot[na.omit(id.snp),]
-# 
-# ##rsNames into colnames
-# #colnames(SNP_calls_diff_mafQC)<-annot[na.omit(id.snp),2]
-# #
-# 
-# ###To put ARCAN in AR
-# annot_samplePaired$Outcome<-replace(annot_samplePaired$Outcome,annot_samplePaired$Outcome=="ARCAN","AR")
-# annot_samplePaired$Outcome<-factor(annot_samplePaired$Outcome)
-# 
-# save(SNP_calls_diff_mafQC,annot_samplePaired,annot_snp_mafQC,file="/Users/Pinedasans/Catalyst/Data/Genotyping/SNP_calls_diff.Rdata")
+load("/Users/Pinedasans/Catalyst/Data/Genotyping/MAF_HEW.Rdata")
+p.value_hwe_adj<-p.adjust(p.value_hwe,"bonferroni") #389,637 with fdr 131,558 with bonferroni pass the MT correction and are not in HWE
+table(maf<0.01) #12,739 has a maf<0.01 and 138,999 has a maf<0.05
+
+id.maf<-match(names(maf),colnames(SNP_calls_diff_common))
+SNP_calls_diff_common_maf<-SNP_calls_diff_common[,na.omit(id.maf)]
+maf2<-maf[which(is.na(id.maf)==F)]
+SNP_calls_diff_mafQC<-SNP_calls_diff_common_maf[,which(maf2>0.01)] #801,977
+
+id.snp<-match(colnames(SNP_calls_diff_mafQC),annot$SNP_id)
+annot_snp_mafQC<-annot[na.omit(id.snp),]
 
 ##Impute data
-SNP_calls_diff_imputed<-rfImpute(SNP_calls_diff_mafQC,annot_samplePaired$Outcome[non.list])
-##This needs to run in the server
+SNP_calls_diff_imputed<-rfImpute(SNP_calls_diff_mafQC,annot_sunil_common$Outcome)
+
+save(SNP_calls_diff_imputed,SNP_calls_diff_mafQC,annot_sunil_common,annot_snp_mafQC,file="/Users/Pinedasans/Catalyst/Data/Genotyping/SNP_calls_common.Rdata")
 
 
 
@@ -62,15 +64,15 @@ SNP_calls_diff_imputed<-rfImpute(SNP_calls_diff_mafQC,annot_samplePaired$Outcome
 #### Validation with RF ###
 ############################
 
-load("/Users/Pinedasans/Catalyst/Data/Genotyping/SNP_calls_diff_imputed.Rdata")
+load("/Users/Pinedasans/Catalyst/Data/Genotyping/SNP_calls_common.Rdata")
 SNP_calls_diff_imputed<-SNP_calls_diff_imputed[,-1]
-load("/Users/Pinedasans/Catalyst/Data/Genotyping/SNP_calls_diff.Rdata")
-non.list<-seq(1,1326,2)
+
 
 ###########################
 ###results from Fisher ####
 ###########################
-resultsFisher<-read.table("/Users/Pinedasans/Catalyst/Results/ResultsEndpointFisherTest.txt",header=T,sep="\t")
+resultsFisher<-read.table("/Users/Pinedasans/Catalyst/Results/ResultsEndpointFisherTestSign.txt",header=T,sep="\t")
+
 #############################
 ##  Variants that overlap ##
 ###########################
@@ -82,11 +84,22 @@ SNP_rf_selected<-SNP_calls_diff_imputed[,id.snp]
 ##Save this variants to plot in ExomeSeq
 write.table(colnames(SNP_rf_selected),"/Users/Pinedasans/Catalyst/Data/Genotyping/19variantsOverlapping.txt",sep="\t")
 
-rf_output_total <- randomForest(annot_samplePaired$Outcome[non.list]~.,data=data.frame(SNP_rf_selected),proximity=TRUE)
+rf_output_total <- randomForest(annot_sunil_common$Outcome~.,data=data.frame(SNP_rf_selected),proximity=TRUE)
 
 COLOR=brewer.pal(3,"Set1")
-MDSplot(rf_output_total, annot_samplePaired$Outcome[non.list],palette = COLOR,main = "19variants Overlap")
-legend("bottomleft", legend=levels(annot_samplePaired$Outcome[non.list]),col=COLOR, pch = 20)
+MDSplot(rf_output_total, annot_sunil_common$Outcome,palette = COLOR,main = "19variants Overlap")
+legend("bottomleft", legend=levels(annot_sunil_common$Outcome),col=COLOR, pch = 20)
+
+##Only AR vs. TX
+annot_ARTX<-annot_sunil_common$Outcome[which(annot_sunil_common$Outcome!="CAN")]
+annot_ARTX<-factor(annot_ARTX)
+SNP_rf_selected_ARTX<-SNP_rf_selected[which(annot_sunil_common$Outcome!="CAN"),]
+rf_output_total <- randomForest(annot_ARTX~.,data=data.frame(SNP_rf_selected_ARTX),proximity=TRUE)
+
+COLOR=brewer.pal(3,"Set1")
+MDSplot(rf_output_total, annot_ARTX,palette = COLOR,main = "19variants Overlap")
+legend("bottomleft", legend=levels(annot_ARTX),col=COLOR, pch = 20)
+
 
 #####Plotting MDS 
 d <- dist(SNP_rf_selected) # euclidean distances between the rows
@@ -252,7 +265,7 @@ for (i in 1:ncol(SNP_calls_diff_mafQC_2categ)){
 }
 
 write.table(p.value,"FisherExactTestRejvsNoRej.txt")
-p.value<-read.table("FisherExactTestRejvsNoRej.txt")
+p.value<-read.table("/Users/Pinedasans/Catalyst/Results/Validation/FisherExactTestRejvsNoRej.txt")
 p.value<-p.value[,1]
 names(p.value)<-colnames(SNP_calls_diff_mafQC_2categ)
 SNP_calls_diff_sign<-SNP_calls_diff_mafQC_2categ[,p.value<0.001] ##792
@@ -264,7 +277,7 @@ intersect(annot_SNP_sign$SNP_rs,resultsFisher$snp138) #None
 
 ##Plotting manhattan plot
 library("qqman")
-id.man<-match(colnames(SNP_calls_diff_mafQC),annot$SNP_id)
+id.man<-match(colnames(SNP_calls_diff_mafQC_2categ),annot$SNP_id)
 data.manhattan<-cbind(annot[na.omit(id.man),c(2,3,4)],p.value)
 colnames(data.manhattan)=c("SNP","CHR","BP","P")
 data.manhattan$CHR<-as.numeric(as.character(data.manhattan$CHR))
